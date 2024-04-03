@@ -1,0 +1,448 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Create_CSV_table": {
+                "inputs": {
+                    "format": "CSV",
+                    "from": "@variables('serialNumbers')"
+                },
+                "runAfter": {
+                    "HTTP_(Invalidate_Token)": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Table"
+            },
+            "For_each": {
+                "actions": {
+                    "For_each_(Iterate_through_Mobile_Device_RSQL_results)": {
+                        "actions": {
+                            "Append_to_array_(mobileDeviceIDs)": {
+                                "inputs": {
+                                    "name": "mobileDeviceIDs",
+                                    "value": "@items('For_each_(Iterate_through_Mobile_Device_RSQL_results)')?['mobileDeviceId']"
+                                },
+                                "runAfter": {},
+                                "type": "AppendToArrayVariable"
+                            },
+                            "Append_to_array_(serialNumbers)": {
+                                "inputs": {
+                                    "name": "serialNumbers",
+                                    "value": "@items('For_each_(Iterate_through_Mobile_Device_RSQL_results)')?['hardware']?['serialNumber']"
+                                },
+                                "runAfter": {
+                                    "Append_to_array_(mobileDeviceIDs)": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "AppendToArrayVariable"
+                            },
+                            "For_each_(Perform_Mobile_Device_actions)": {
+                                "actions": {
+                                    "HTTP_(MDM_Command)": {
+                                        "inputs": {
+                                            "headers": {
+                                                "Accept": "application/json",
+                                                "Authorization": "Bearer @{variables('token')}"
+                                            },
+                                            "method": "POST",
+                                            "uri": "@{parameters('jss')}/JSSResource/mobiledevicecommands/command/UnmanageDevice/id/@{items('For_each_(Perform_Mobile_Device_actions)')}"
+                                        },
+                                        "runAfter": {
+                                            "HTTP_(Update_Mobile_Device_Extension_Attribute)": [
+                                                "Succeeded",
+                                                "Failed"
+                                            ]
+                                        },
+                                        "type": "Http"
+                                    },
+                                    "HTTP_(Update_Mobile_Device_Extension_Attribute)": {
+                                        "inputs": {
+                                            "body": {
+                                                "updatedExtensionAttributes": [
+                                                    {
+                                                        "name": "@{parameters('Extension Attribute Name')}",
+                                                        "type": "STRING",
+                                                        "value": [
+                                                            "@{parameters('Extension Attribute Value')}"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            "headers": {
+                                                "Authorization": "Bearer @{variables('token')}",
+                                                "accept": "application/json",
+                                                "content-type": "application/json"
+                                            },
+                                            "method": "PATCH",
+                                            "uri": "@{parameters('jss')}/api/v2/mobile-devices/@{items('For_each_(Perform_Mobile_Device_actions)')}"
+                                        },
+                                        "runAfter": {},
+                                        "type": "Http"
+                                    }
+                                },
+                                "foreach": "@variables('mobileDeviceIDs')",
+                                "runAfter": {
+                                    "Append_to_array_(serialNumbers)": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "Foreach"
+                            }
+                        },
+                        "foreach": "@body('Parse_JSON_(Mobile_Device_API_call_with_RSQL_filter)')?['results']",
+                        "runAfter": {
+                            "Parse_JSON_(Mobile_Device_API_call_with_RSQL_filter)": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Foreach"
+                    },
+                    "HTTP_(Mobile_Device_API_call_with_RSQL_filter)": {
+                        "inputs": {
+                            "headers": {
+                                "Accept": "application/json",
+                                "Authorization": "Bearer @{variables('token')}"
+                            },
+                            "method": "GET",
+                            "uri": "@{parameters('jss')}/api/v2/mobile-devices/detail?section=HARDWARE&page=0&page-size=100&sort=displayName%3Aasc&filter=emailAddress%3D%3D%22@{replace(items('For_each'), '@', '%40')}%22"
+                        },
+                        "runAfter": {},
+                        "type": "Http"
+                    },
+                    "Parse_JSON_(Mobile_Device_API_call_with_RSQL_filter)": {
+                        "inputs": {
+                            "content": "@body('HTTP_(Mobile_Device_API_call_with_RSQL_filter)')",
+                            "schema": {
+                                "properties": {
+                                    "results": {
+                                        "items": {
+                                            "properties": {
+                                                "applications": {},
+                                                "certificates": {},
+                                                "deviceType": {
+                                                    "type": "string"
+                                                },
+                                                "ebooks": {},
+                                                "extensionAttributes": {},
+                                                "general": {},
+                                                "hardware": {
+                                                    "properties": {
+                                                        "availableSpaceMb": {},
+                                                        "batteryLevel": {},
+                                                        "bluetoothLowEnergyCapable": {
+                                                            "type": "boolean"
+                                                        },
+                                                        "bluetoothMacAddress": {
+                                                            "type": "string"
+                                                        },
+                                                        "capacityMb": {},
+                                                        "deviceId": {},
+                                                        "extensionAttributes": {},
+                                                        "model": {
+                                                            "type": "string"
+                                                        },
+                                                        "modelIdentifier": {},
+                                                        "modelNumber": {},
+                                                        "modemFirmwareVersion": {},
+                                                        "serialNumber": {
+                                                            "type": "string"
+                                                        },
+                                                        "usedSpacePercentage": {},
+                                                        "wifiMacAddress": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "mobileDeviceId": {
+                                                    "type": "string"
+                                                },
+                                                "network": {},
+                                                "profiles": {},
+                                                "provisioningProfiles": {},
+                                                "purchasing": {},
+                                                "security": {},
+                                                "serviceSubscriptions": {},
+                                                "sharedUsers": {},
+                                                "userAndLocation": {},
+                                                "userProfiles": {}
+                                            },
+                                            "required": [
+                                                "mobileDeviceId",
+                                                "deviceType",
+                                                "hardware",
+                                                "userAndLocation",
+                                                "purchasing",
+                                                "applications",
+                                                "certificates",
+                                                "profiles",
+                                                "userProfiles",
+                                                "extensionAttributes"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "type": "array"
+                                    },
+                                    "totalCount": {
+                                        "type": "integer"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "runAfter": {
+                            "HTTP_(Mobile_Device_API_call_with_RSQL_filter)": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ParseJson"
+                    }
+                },
+                "foreach": "@variables('userEmails')",
+                "runAfter": {
+                    "Initialize_variable_(serialNumbers)": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "For_each_(SQL_rows)": {
+                "actions": {
+                    "Append_to_array_variable_(userEmails)": {
+                        "inputs": {
+                            "name": "userEmails",
+                            "value": "@items('For_each_(SQL_rows)')?['CollegeEmail']"
+                        },
+                        "runAfter": {},
+                        "type": "AppendToArrayVariable"
+                    }
+                },
+                "foreach": "@body('Get_rows_(V2)')?['value']",
+                "runAfter": {
+                    "Initialize_variable_(userEmails)": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "Generate_JSS_Bearer_Token": {
+                "inputs": {
+                    "body": "grant_type=client_credentials&client_id=@{parameters('client_id')}&client_secret=@{parameters('client_secret')}",
+                    "headers": {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    "method": "POST",
+                    "uri": "@{parameters('jss')}/api/oauth/token"
+                },
+                "runAfter": {
+                    "For_each_(SQL_rows)": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Get_rows_(V2)": {
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['sql']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/tables/@{encodeURIComponent(encodeURIComponent('[dbo].[sjvc_vwJamfDeviceDepro]'))}/items",
+                    "queries": {
+                        "$select": "CollegeEmail"
+                    }
+                },
+                "runAfter": {},
+                "type": "ApiConnection"
+            },
+            "HTTP_(Invalidate_Token)": {
+                "inputs": {
+                    "headers": {
+                        "Authorization": "Bearer @{variables('token')}"
+                    },
+                    "method": "POST",
+                    "uri": "@{parameters('jss')}/api/v1/auth/invalidate-token"
+                },
+                "runAfter": {
+                    "For_each": [
+                        "Succeeded",
+                        "Failed"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Initialize_variable_(mobileDeviceIDs)": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "mobileDeviceIDs",
+                            "type": "array"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_variable_(token)": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_variable_(serialNumbers)": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "serialNumbers",
+                            "type": "array"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_variable_(mobileDeviceIDs)": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_variable_(token)": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "token",
+                            "type": "string",
+                            "value": "@body('Parse_JSON_(Generate_JSS_Bearer_Token_Response)')?['access_token']"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_JSON_(Generate_JSS_Bearer_Token_Response)": [
+                        "Succeeded"
+                    ]
+                },
+                "trackedProperties": {
+                    "token": ""
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_variable_(userEmails)": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "userEmails",
+                            "type": "array"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Get_rows_(V2)": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Parse_JSON_(Generate_JSS_Bearer_Token_Response)": {
+                "inputs": {
+                    "content": "@body('Generate_JSS_Bearer_Token')",
+                    "schema": {
+                        "properties": {
+                            "access_token": {
+                                "type": "string"
+                            },
+                            "expires_in": {
+                                "type": "integer"
+                            },
+                            "scope": {
+                                "type": "string"
+                            },
+                            "token_type": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Generate_JSS_Bearer_Token": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Send_email_(V4)": {
+                "inputs": {
+                    "body": {
+                        "from": "email@email.com",
+                        "ishtml": true,
+                        "subject": "SJVC Off-boarding Summary",
+                        "text": "<p>@{body('Create_CSV_table')}</p>",
+                        "to": "email@email.com"
+                    },
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['sendgrid']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "path": "/v4/mail/send"
+                },
+                "runAfter": {
+                    "Create_CSV_table": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            },
+            "Extension Attribute Name": {
+                "defaultValue": "Graduated",
+                "type": "String"
+            },
+            "Extension Attribute Value": {
+                "defaultValue": "true",
+                "type": "String"
+            },
+            "client_id": {
+                "defaultValue": "",
+                "type": "String"
+            },
+            "client_secret": {
+                "defaultValue": "",
+                "type": "String"
+            },
+            "jss": {
+                "defaultValue": "",
+                "type": "String"
+            }
+        },
+        "triggers": {
+            "Recurrence": {
+                "evaluatedRecurrence": {
+                    "frequency": "Month",
+                    "interval": 1
+                },
+                "recurrence": {
+                    "frequency": "Month",
+                    "interval": 1
+                },
+                "type": "Recurrence"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                
+            }
+        }
+    }
+}
